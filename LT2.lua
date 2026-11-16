@@ -1,79 +1,111 @@
 
 --[[
-    LT2 UTILITY HUB
-    Client-side Delta Executor script
+    LT2 UTILITY HUB V2
+    GUI + INVENTORY + TREE SCANNER
+    Default GUI key: Right Shift
 ]]
 
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
-local RS = game:GetService("ReplicatedStorage")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
 
 local Character = LP.Character or LP.CharacterAdded:Wait()
-local Root = Character:WaitForChild("HumanoidRootPart")
-local Humanoid = Character:WaitForChild("Humanoid")
+local Backpack = LP:WaitForChild("Backpack")
 
-local Remote = RS:WaitForChild("Interaction"):WaitForChild("RemoteProxy")
-local AxeClasses = RS:WaitForChild("AxeClasses")
-
-local savedPosition = nil
-local selectedTree = nil
-local selectedClass = nil
-local flying = false
-local flySpeed = 65
-local flyConnection = nil
-local selectedTab = "Main"
-
--- WOOD TYPES
-local WoodNames = {
-    "Oak", "Elm", "Birch", "Cherry", "Walnut",
-    "Koa", "Palm", "Fir", "Pine", "Blue Spruce",
-    "Gold", "Zombie", "Lava", "Volcano",
-    "Frost", "Cavecrawler", "Phantom",
-    "Snowglow", "Spooky", "Sinister",
-    "Spook", "LoneCave"
+local Settings = {
+    ToggleKey = Enum.KeyCode.RightShift,
+    RGB = true,
+    Accent = Color3.fromRGB(0, 210, 255),
+    Search = "",
+    CurrentTab = "Home"
 }
+
+local savedPosition
+local selectedTree
+local selectedAxe
+local busy = false
 
 -- GUI
 local GUI = Instance.new("ScreenGui")
-GUI.Name = "LT2UtilityHub"
+GUI.Name = "LT2UtilityV2"
 GUI.ResetOnSpawn = false
 GUI.Parent = game:GetService("CoreGui")
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.fromOffset(590, 420)
-Main.Position = UDim2.new(0.5, -295, 0.5, -210)
-Main.BackgroundColor3 = Color3.fromRGB(20, 22, 29)
+Main.Size = UDim2.fromOffset(720, 480)
+Main.Position = UDim2.new(0.5, -360, 0.5, -240)
+Main.BackgroundColor3 = Color3.fromRGB(15, 18, 27)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Main.Parent = GUI
 
-local Corner = Instance.new("UICorner")
-Corner.CornerRadius = UDim.new(0, 10)
-Corner.Parent = Main
+local function corner(obj, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius)
+    c.Parent = obj
+end
 
-local Header = Instance.new("TextLabel")
-Header.Size = UDim2.new(1, 0, 0, 48)
-Header.BackgroundColor3 = Color3.fromRGB(30, 34, 45)
-Header.Text = "LT2  |  UTILITY HUB"
-Header.TextColor3 = Color3.fromRGB(255,255,255)
-Header.TextSize = 19
-Header.Font = Enum.Font.GothamBold
+corner(Main, 12)
+
+-- RGB BORDER
+local Stroke = Instance.new("UIStroke")
+Stroke.Thickness = 2
+Stroke.Parent = Main
+
+-- HEADER
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 55)
+Header.BackgroundColor3 = Color3.fromRGB(23, 28, 41)
+Header.BorderSizePixel = 0
 Header.Parent = Main
+corner(Header, 12)
 
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(0.7, 0, 1, 0)
+Title.Position = UDim2.fromOffset(18, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "LT2 UTILITY HUB  V2"
+Title.TextColor3 = Color3.new(1,1,1)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 19
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local Status = Instance.new("TextLabel")
+Status.Size = UDim2.fromOffset(130, 40)
+Status.Position = UDim2.new(1, -145, 0, 8)
+Status.BackgroundTransparency = 1
+Status.Text = "● READY"
+Status.TextColor3 = Settings.Accent
+Status.Font = Enum.Font.GothamBold
+Status.TextSize = 12
+Status.Parent = Header
+
+-- SIDEBAR
 local Sidebar = Instance.new("Frame")
-Sidebar.Position = UDim2.fromOffset(0, 48)
-Sidebar.Size = UDim2.new(0, 145, 1, -48)
-Sidebar.BackgroundColor3 = Color3.fromRGB(25, 28, 37)
+Sidebar.Position = UDim2.fromOffset(10, 65)
+Sidebar.Size = UDim2.new(0, 165, 1, -75)
+Sidebar.BackgroundColor3 = Color3.fromRGB(20, 24, 35)
 Sidebar.Parent = Main
+corner(Sidebar, 9)
 
+local SideLayout = Instance.new("UIListLayout")
+SideLayout.Padding = UDim.new(0, 6)
+SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SideLayout.Parent = Sidebar
+
+local SidePadding = Instance.new("UIPadding")
+SidePadding.PaddingTop = UDim.new(0, 12)
+SidePadding.Parent = Sidebar
+
+-- CONTENT
 local Content = Instance.new("ScrollingFrame")
-Content.Position = UDim2.fromOffset(155, 58)
-Content.Size = UDim2.new(1, -165, 1, -68)
+Content.Position = UDim2.fromOffset(185, 65)
+Content.Size = UDim2.new(1, -195, 1, -75)
 Content.BackgroundTransparency = 1
 Content.BorderSizePixel = 0
 Content.ScrollBarThickness = 3
@@ -81,103 +113,187 @@ Content.AutomaticCanvasSize = Enum.AutomaticSize.Y
 Content.CanvasSize = UDim2.new()
 Content.Parent = Main
 
-local Layout = Instance.new("UIListLayout")
-Layout.Padding = UDim.new(0, 8)
-Layout.Parent = Content
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Padding = UDim.new(0, 8)
+ContentLayout.Parent = Content
+
+local function notify(message)
+    Status.Text = "● " .. message
+end
 
 local function clearContent()
     for _, v in ipairs(Content:GetChildren()) do
-        if v:IsA("GuiObject") and v ~= Layout then
+        if v ~= ContentLayout then
             v:Destroy()
         end
     end
 end
 
-local function button(name, callback)
+local function section(name)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 30)
+    label.BackgroundTransparency = 1
+    label.Text = name:upper()
+    label.TextColor3 = Settings.Accent
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = Content
+end
+
+local function addButton(name, callback)
     local b = Instance.new("TextButton")
-    b.Size = UDim2.new(1, -10, 0, 36)
-    b.BackgroundColor3 = Color3.fromRGB(42, 48, 63)
-    b.TextColor3 = Color3.new(1,1,1)
+    b.Size = UDim2.new(1, -10, 0, 38)
+    b.BackgroundColor3 = Color3.fromRGB(34, 40, 55)
     b.Text = name
+    b.TextColor3 = Color3.new(1,1,1)
     b.Font = Enum.Font.GothamMedium
     b.TextSize = 12
     b.Parent = Content
+    corner(b, 7)
 
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 6)
-    c.Parent = b
+    b.MouseEnter:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(48, 59, 79)
+    end)
+
+    b.MouseLeave:Connect(function()
+        b.BackgroundColor3 = Color3.fromRGB(34, 40, 55)
+    end)
 
     b.MouseButton1Click:Connect(callback)
-    return b
 end
 
-local function label(name)
-    local l = Instance.new("TextLabel")
-    l.Size = UDim2.new(1, -10, 0, 27)
-    l.BackgroundTransparency = 1
-    l.Text = name
-    l.TextColor3 = Color3.fromRGB(110, 190, 255)
-    l.TextSize = 13
-    l.Font = Enum.Font.GothamBold
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.Parent = Content
-end
+local function addSearch()
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, -10, 0, 38)
+    box.BackgroundColor3 = Color3.fromRGB(30, 36, 49)
+    box.PlaceholderText = "Search features..."
+    box.Text = ""
+    box.TextColor3 = Color3.new(1,1,1)
+    box.PlaceholderColor3 = Color3.fromRGB(140,145,160)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 13
+    box.Parent = Content
+    corner(box, 7)
 
-local function notify(msg)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = "LT2 Utility Hub",
-            Text = msg,
-            Duration = 4
-        })
+    box:GetPropertyChangedSignal("Text"):Connect(function()
+        Settings.Search = string.lower(box.Text)
+
+        for _, child in ipairs(Content:GetChildren()) do
+            if child:IsA("TextButton") then
+                child.Visible =
+                    Settings.Search == "" or
+                    string.find(
+                        string.lower(child.Text),
+                        Settings.Search,
+                        1,
+                        true
+                    ) ~= nil
+            end
+        end
     end)
 end
 
--- POSITION SYSTEM
+-- AXE DETECTION
+local function getAxes()
+    Character = LP.Character or Character
+
+    local axes = {}
+
+    -- Equipped tools
+    for _, tool in ipairs(Character:GetChildren()) do
+        if tool:IsA("Tool") then
+            table.insert(axes, {
+                Tool = tool,
+                Equipped = true,
+                Name = tool.Name
+            })
+        end
+    end
+
+    -- Backpack tools
+    for _, tool in ipairs(Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local name = tool.Name:lower()
+
+            if name:find("axe") then
+                table.insert(axes, {
+                    Tool = tool,
+                    Equipped = false,
+                    Name = tool.Name
+                })
+            end
+        end
+    end
+
+    return axes
+end
+
+local function getCurrentAxe()
+    for _, axe in ipairs(getAxes()) do
+        if axe.Equipped then
+            return axe
+        end
+    end
+
+    return nil
+end
+
+local function equipAxe(axe)
+    if not axe or not axe.Tool then
+        return false
+    end
+
+    if axe.Equipped then
+        selectedAxe = axe.Tool
+        notify("Existing axe retained")
+        return true
+    end
+
+    local humanoid = Character:FindFirstChildOfClass("Humanoid")
+
+    if humanoid then
+        humanoid:EquipTool(axe.Tool)
+        selectedAxe = axe.Tool
+        notify("Equipped " .. axe.Name)
+        return true
+    end
+
+    return false
+end
+
+-- POSITION
 local function savePosition()
-    if Root then
-        savedPosition = Root.CFrame
-        notify("Position saved!")
+    local root = Character:FindFirstChild("HumanoidRootPart")
+
+    if root then
+        savedPosition = root.CFrame
+        notify("Position saved")
     end
 end
 
 local function returnPosition()
-    if savedPosition and Root then
-        Root.CFrame = savedPosition
-        notify("Returned to saved position!")
+    local root = Character:FindFirstChild("HumanoidRootPart")
+
+    if root and savedPosition then
+        root.CFrame = savedPosition
+        notify("Position restored")
     else
-        notify("No saved position!")
+        notify("No saved position")
     end
 end
 
 -- TREE SCANNER
-local function getRegions()
-    local regions = {}
-
-    for _, obj in ipairs(workspace:GetChildren()) do
-        if obj.Name == "TreeRegion" then
-            table.insert(regions, obj)
-        end
-    end
-
-    return regions
-end
-
 local function getTrees()
     local trees = {}
 
-    for _, region in ipairs(getRegions()) do
-        for _, tree in ipairs(region:GetChildren()) do
-            if tree:IsA("Model")
-            and tree:FindFirstChild("TreeClass")
-            and tree:FindFirstChild("CutEvent")
-            and tree:FindFirstChild("WoodSection") then
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local class = obj:FindFirstChild("TreeClass")
+            local section = obj:FindFirstChild("WoodSection")
 
-                local owner = tree:FindFirstChild("Owner")
-
-                if owner and owner.Value == nil then
-                    table.insert(trees, tree)
-                end
+            if class and section then
+                table.insert(trees, obj)
             end
         end
     end
@@ -185,567 +301,300 @@ local function getTrees()
     return trees
 end
 
-local function getTreeClasses()
-    local classes = {}
+local function scanTrees()
+    local trees = getTrees()
+    local types = {}
 
-    for _, tree in ipairs(getTrees()) do
-        local class = tree.TreeClass.Value
-        classes[class] = true
+    for _, tree in ipairs(trees) do
+        local class = tree:FindFirstChild("TreeClass")
+
+        if class then
+            types[tostring(class.Value)] =
+                (types[tostring(class.Value)] or 0) + 1
+        end
     end
 
-    return classes
+    print("===== LT2 TREE SCANNER =====")
+
+    for name, amount in pairs(types) do
+        print(name, amount)
+    end
+
+    notify("Found " .. #trees .. " tree models")
 end
 
--- AXE SYSTEM
-local function getAxeStats(axeName, treeClass)
-    local module = AxeClasses:FindFirstChild("AxeClass_" .. axeName)
+-- INVENTORY SORTING
+local function getInventory()
+    local items = {}
 
-    if not module then
-        return nil
+    for _, tool in ipairs(Backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            table.insert(items, tool)
+        end
     end
 
-    local success, stats = pcall(function()
-        return require(module).new()
+    table.sort(items, function(a, b)
+        return a.Name:lower() < b.Name:lower()
     end)
 
-    if not success or not stats then
-        return nil
-    end
-
-    if stats.SpecialTrees and stats.SpecialTrees[treeClass] then
-        for key, value in pairs(stats.SpecialTrees[treeClass]) do
-            stats[key] = value
-        end
-    end
-
-    return stats
+    return items
 end
 
-local function findBestAxe(treeClass)
-    local axes = {}
+local function showInventory()
+    print("===== INVENTORY =====")
 
-    for _, tool in ipairs(LP.Backpack:GetChildren()) do
-        local toolName = tool:FindFirstChild("ToolName")
-
-        if tool:IsA("Tool") and toolName then
-            local stats = getAxeStats(toolName.Value, treeClass)
-
-            if stats then
-                table.insert(axes, {
-                    Tool = tool,
-                    Stats = stats
-                })
-            end
-        end
+    for i, item in ipairs(getInventory()) do
+        print(i, item.Name)
     end
 
-    table.sort(axes, function(a, b)
-        return (a.Stats.Damage or 0) > (b.Stats.Damage or 0)
-    end)
-
-    return axes[1]
+    notify("Inventory sorted alphabetically")
 end
 
--- TREE INFORMATION
-local function getTreeMass(tree)
-    local mass = 0
-
-    for _, part in ipairs(tree:GetDescendants()) do
-        if part:IsA("BasePart") and part.Name ~= "Leaves" then
-            mass = mass + part.Mass
-        end
-    end
-
-    return mass
+local function countItems()
+    local count = #getInventory()
+    notify("Inventory: " .. count .. " items")
 end
 
--- SELECTED TREE
-local function findTree(class)
-    local matches = {}
-
-    for _, tree in ipairs(getTrees()) do
-        if tree.TreeClass.Value == class then
-            table.insert(matches, tree)
-        end
-    end
-
-    table.sort(matches, function(a, b)
-        return getTreeMass(a) > getTreeMass(b)
-    end)
-
-    return matches[1]
-end
-
--- BRING WOOD
--- Uses the game's chopping and dragging interaction.
-local busy = false
-
-local function bringWood(class)
-    if busy then
-        notify("Already processing a tree!")
-        return
-    end
-
-    busy = true
-
-    task.spawn(function()
-        local success, err = pcall(function()
-
-            savePosition()
-
-            local tree = findTree(class)
-
-            if not tree then
-                error("No available " .. class .. " tree found")
-            end
-
-            local axeData = findBestAxe(class)
-
-            if not axeData then
-                error("No compatible axe found in backpack")
-            end
-
-            local axe = axeData.Tool
-            local stats = axeData.Stats
-
-            Humanoid:UnequipTools()
-            task.wait(0.2)
-
-            Humanoid:EquipTool(axe)
-            task.wait(0.3)
-
-            local startPosition = savedPosition
-
-            notify("Chopping " .. class .. "...")
-
-            local wood = nil
-            local connection
-
-            connection = workspace.LogModels.ChildAdded:Connect(function(log)
-                task.wait()
-
-                local owner = log:FindFirstChild("Owner")
-
-                if owner and owner.Value == LP then
-                    wood = log
-                    connection:Disconnect()
-                end
-            end)
-
-            local section = tree:FindFirstChild("WoodSection")
-
-            if not section then
-                error("Tree section unavailable")
-            end
-
-            Root.CFrame = CFrame.new(
-                section.Position + Vector3.new(5, 3, 0)
-            )
-
-            task.wait(0.3)
-
-            local properties = {
-                tool = axe,
-                height = 0.3,
-                faceVector = Vector3.new(1, 0, 0),
-                sectionId = 1,
-                hitPoints = stats.Damage,
-                cooldown = stats.SwingCooldown,
-                cuttingClass = "Axe"
-            }
-
-            local timeout = os.clock() + 180
-
-            repeat
-                if not tree.Parent then break end
-
-                Remote:FireServer(tree.CutEvent, properties)
-
-                task.wait(stats.SwingCooldown or 0.3)
-
-            until wood or os.clock() > timeout
-
-            if connection then
-                connection:Disconnect()
-            end
-
-            if not wood then
-                error("Chopping timed out or no log was created")
-            end
-
-            notify("Tree chopped! Bringing wood back...")
-
-            task.wait(0.2)
-
-            wood.PrimaryPart = wood:FindFirstChild("WoodSection")
-
-            if not wood.PrimaryPart then
-                error("Wood primary part unavailable")
-            end
-
-            for i = 1, 60 do
-                pcall(function()
-                    Remote:FireServer(
-                        RS.Interaction.ClientIsDragging,
-                        wood
-                    )
-                end)
-
-                task.wait()
-            end
-
-            for i = 1, 60 do
-                wood.PrimaryPart.AssemblyLinearVelocity = Vector3.zero
-                wood:PivotTo(startPosition)
-                task.wait()
-            end
-
-            Root.CFrame = startPosition
-
-            notify(class .. " wood returned!")
-
-        end)
-
-        busy = false
-
-        if not success then
-            notify("Error: " .. tostring(err))
-            if savedPosition and Root then
-                Root.CFrame = savedPosition
-            end
-        end
-    end)
-end
-
--- FLY SYSTEM
-local function toggleFly()
-    flying = not flying
-
-    if flying then
-        local attachment = Instance.new("Attachment")
-        attachment.Parent = Root
-
-        local velocity = Instance.new("LinearVelocity")
-        velocity.Attachment0 = attachment
-        velocity.MaxForce = math.huge
-        velocity.VectorVelocity = Vector3.zero
-        velocity.Parent = Root
-
-        flyConnection = RunService.RenderStepped:Connect(function()
-            if not flying or not Root then return end
-
-            local camera = workspace.CurrentCamera
-            local direction = Vector3.zero
-
-            if UIS:IsKeyDown(Enum.KeyCode.W) then
-                direction += camera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.S) then
-                direction -= camera.CFrame.LookVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.A) then
-                direction -= camera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.D) then
-                direction += camera.CFrame.RightVector
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.Space) then
-                direction += Vector3.yAxis
-            end
-            if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
-                direction -= Vector3.yAxis
-            end
-
-            velocity.VectorVelocity = direction * flySpeed
-        end)
-
-        notify("Fly enabled - WASD + Space/Ctrl")
-
-        task.spawn(function()
-            repeat task.wait() until not flying
-
-            if flyConnection then
-                flyConnection:Disconnect()
-                flyConnection = nil
-            end
-
-            velocity:Destroy()
-            attachment:Destroy()
-        end)
-    else
-        notify("Fly disabled")
-    end
-end
-
--- TREE VIEW
-local function showTreeInfo()
-    local classes = getTreeClasses()
-    local count = 0
-
-    for class in pairs(classes) do
-        count += 1
-        print("[LT2] Tree detected:", class)
-    end
-
-    notify(count .. " different tree types detected. Check F9 console.")
-end
-
--- TAB CONTENT
+-- HOME
 local function loadTab(tab)
-    selectedTab = tab
+    Settings.CurrentTab = tab
     clearContent()
 
-    if tab == "Main" then
+    if tab == "Home" then
+        section("Dashboard")
+        addSearch()
 
-        label("POSITION")
-        button("Save Current Position", savePosition)
-        button("Return To Saved Position", returnPosition)
+        addButton("Save Current Position", savePosition)
+        addButton("Return To Saved Position", returnPosition)
+        addButton("Scan All Trees", scanTrees)
+        addButton("Show Inventory", showInventory)
+        addButton("Count Inventory Items", countItems)
 
-        label("QUICK ACTIONS")
-        button("Refresh Tree Scanner", showTreeInfo)
-        button("Show Secret", function()
-            local popup = Instance.new("TextLabel")
-            popup.Size = UDim2.fromOffset(350, 65)
-            popup.Position = UDim2.new(0.5, -175, 0.15, 0)
-            popup.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-            popup.TextColor3 = Color3.new(1, 1, 1)
-            popup.Font = Enum.Font.GothamBold
-            popup.TextSize = 18
-            popup.Text = "oliver vaughn 187 kingsway"
-            popup.Parent = GUI
+        section("Quick Information")
 
-            Instance.new("UICorner", popup)
+        addButton("Check Equipped Axe", function()
+            local axe = getCurrentAxe()
 
-            task.delay(5, function()
-                popup:Destroy()
-            end)
+            if axe then
+                notify("Holding " .. axe.Name)
+            else
+                notify("No axe equipped")
+            end
         end)
 
     elseif tab == "Wood" then
+        section("Wood Manager")
 
-        label("WOOD HARVESTING")
-        button("Refresh Tree List", function()
-            loadTab("Wood")
-            notify("Tree list refreshed")
+        addButton("Scan Tree Types", scanTrees)
+
+        for _, tree in ipairs(getTrees()) do
+            local class = tree:FindFirstChild("TreeClass")
+
+            if class then
+                addButton("Select " .. tostring(class.Value), function()
+                    selectedTree = tree
+                    notify("Selected " .. tostring(class.Value))
+                end)
+            end
+        end
+
+    elseif tab == "Items" then
+        section("Inventory Manager")
+
+        addButton("Sort Alphabetically", showInventory)
+        addButton("Count Items", countItems)
+
+        addButton("Refresh Inventory", function()
+            notify("Inventory refreshed")
+            loadTab("Items")
         end)
 
-        for class in pairs(getTreeClasses()) do
-            button("Bring " .. class, function()
-                selectedClass = class
-                bringWood(class)
-            end)
-        end
+        section("Axe Manager")
 
-        label("ADDITIONAL WOOD TYPES")
+        addButton("Find All Axes", function()
+            local axes = getAxes()
 
-        for _, class in ipairs(WoodNames) do
-            button("Search " .. class, function()
-                local tree = findTree(class)
+            for _, axe in ipairs(axes) do
+                print(axe.Name, axe.Equipped and "Equipped" or "Backpack")
+            end
 
-                if tree then
-                    selectedTree = tree
-                    notify(class .. " tree found")
-                else
-                    notify("No " .. class .. " tree currently available")
+            notify(#axes .. " axes detected")
+        end)
+
+        addButton("Keep Current Axe", function()
+            local axe = getCurrentAxe()
+
+            if axe then
+                selectedAxe = axe.Tool
+                notify("Keeping " .. axe.Name)
+            else
+                notify("No equipped axe")
+            end
+        end)
+
+        addButton("Equip First Available Axe", function()
+            local axes = getAxes()
+
+            if #axes > 0 then
+                for _, axe in ipairs(axes) do
+                    if not axe.Equipped then
+                        equipAxe(axe)
+                        return
+                    end
                 end
-            end)
-        end
+
+                notify("Axe already equipped")
+            else
+                notify("No axes found")
+            end
+        end)
 
     elseif tab == "Movement" then
+        section("Movement Information")
 
-        label("FLIGHT")
-        button("Toggle Fly", toggleFly)
+        addButton("Save Position", savePosition)
+        addButton("Return Position", returnPosition)
 
-        button("Increase Fly Speed", function()
-            flySpeed = math.min(flySpeed + 10, 200)
-            notify("Fly speed: " .. flySpeed)
-        end)
+        addButton("Show Current Speed", function()
+            local h = Character:FindFirstChildOfClass("Humanoid")
 
-        button("Decrease Fly Speed", function()
-            flySpeed = math.max(flySpeed - 10, 10)
-            notify("Fly speed: " .. flySpeed)
-        end)
-
-        label("CHARACTER")
-        button("Speed +", function()
-            Humanoid.WalkSpeed = Humanoid.WalkSpeed + 5
-        end)
-
-        button("Speed -", function()
-            Humanoid.WalkSpeed = math.max(16, Humanoid.WalkSpeed - 5)
-        end)
-
-        button("Jump Boost", function()
-            Humanoid.UseJumpPower = true
-            Humanoid.JumpPower = 90
-        end)
-
-        button("Reset Movement", function()
-            Humanoid.WalkSpeed = 16
-            Humanoid.JumpPower = 50
+            if h then
+                notify("Walk speed: " .. h.WalkSpeed)
+            end
         end)
 
     elseif tab == "Teleports" then
+        section("Saved Locations")
 
-        label("SAVED LOCATIONS")
+        addButton("Save Current Location", savePosition)
+        addButton("Return To Saved Location", returnPosition)
 
-        button("Save Teleport Point", function()
-            savePosition()
-        end)
-
-        button("Teleport To Saved Point", returnPosition)
-
-        label("TREE TELEPORT")
-
-        button("Teleport To Selected Tree", function()
+        addButton("Select Tree Location", function()
             if selectedTree and selectedTree.Parent then
-                Root.CFrame = selectedTree.WoodSection.CFrame
-                    + Vector3.new(5, 3, 0)
+                local part = selectedTree:FindFirstChild("WoodSection")
+                local root = Character:FindFirstChild("HumanoidRootPart")
+
+                if part and root then
+                    root.CFrame = part.CFrame + Vector3.new(5,3,0)
+                    notify("Tree location reached")
+                end
             else
                 notify("Select a tree first")
             end
         end)
 
-    elseif tab == "Tree Info" then
+    elseif tab == "Settings" then
+        section("Interface Settings")
 
-        label("WORLD TREE SCANNER")
-
-        button("Scan All Trees", showTreeInfo)
-
-        button("Print Tree Locations", function()
-            for _, tree in ipairs(getTrees()) do
-                print(
-                    tree.TreeClass.Value,
-                    tree.WoodSection.Position
-                )
-            end
-
-            notify("Tree positions printed to console")
+        addButton("Toggle RGB Border", function()
+            Settings.RGB = not Settings.RGB
+            notify("RGB: " .. tostring(Settings.RGB))
         end)
 
-        button("Show Selected Tree", function()
-            if selectedTree then
-                notify(selectedTree.TreeClass.Value)
-            else
-                notify("No tree selected")
-            end
+        addButton("Change GUI Keybind", function()
+            notify("Press a key to set new toggle")
+            local connection
+
+            connection = UIS.InputBegan:Connect(function(input, processed)
+                if input.UserInputType == Enum.UserInputType.Keyboard then
+                    Settings.ToggleKey = input.KeyCode
+                    notify("Keybind: " .. input.KeyCode.Name)
+                    connection:Disconnect()
+                end
+            end)
         end)
 
-        label("END TIMES")
-        button("Find Phantom Trees", function()
-            local tree = findTree("LoneCave")
-
-            if tree then
-                selectedTree = tree
-                notify("Phantom tree detected")
-            else
-                notify("No accessible Phantom tree found")
-            end
+        addButton("Reset Keybind", function()
+            Settings.ToggleKey = Enum.KeyCode.RightShift
+            notify("Reset to Right Shift")
         end)
 
-    elseif tab == "Axes" then
-
-        label("AXE INVENTORY")
-
-        for _, tool in ipairs(LP.Backpack:GetChildren()) do
-            if tool:FindFirstChild("ToolName") then
-                button(tool.ToolName.Value, function()
-                    Humanoid:EquipTool(tool)
-                    notify("Equipped " .. tool.ToolName.Value)
-                end)
-            end
-        end
-
-        button("Unequip All Axes", function()
-            Humanoid:UnequipTools()
+        addButton("Reset Interface", function()
+            Main.Size = UDim2.fromOffset(720, 480)
+            Main.Position = UDim2.new(0.5, -360, 0.5, -240)
+            notify("Interface reset")
         end)
 
     elseif tab == "Misc" then
+        section("Miscellaneous")
 
-        label("MISCELLANEOUS")
-
-        button("Show Secret", function()
-            loadTab("Main")
-            task.wait(0.1)
-
+        addButton("Secret", function()
             local popup = Instance.new("TextLabel")
-            popup.Size = UDim2.fromOffset(350, 65)
-            popup.Position = UDim2.new(0.5, -175, 0.15, 0)
-            popup.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-            popup.TextColor3 = Color3.new(1, 1, 1)
-            popup.Text = "oliver vaughn 187 kingsway"
+            popup.Size = UDim2.fromOffset(380, 65)
+            popup.Position = UDim2.new(0.5, -190, 0.12, 0)
+            popup.BackgroundColor3 = Color3.fromRGB(25,30,45)
+            popup.TextColor3 = Color3.new(1,1,1)
             popup.Font = Enum.Font.GothamBold
             popup.TextSize = 18
+            popup.Text = "oliver vaughn 187 kingsway"
             popup.Parent = GUI
+            corner(popup, 10)
 
             task.delay(5, function()
                 popup:Destroy()
             end)
         end)
 
-        button("Refresh Character", function()
-            Character = LP.Character
-            Root = Character:WaitForChild("HumanoidRootPart")
-            Humanoid = Character:WaitForChild("Humanoid")
-            notify("Character refreshed")
-        end)
-
-        button("Hide GUI", function()
+        addButton("Hide GUI", function()
             Main.Visible = false
         end)
 
-        button("Destroy GUI", function()
-            flying = false
-            if flyConnection then
-                flyConnection:Disconnect()
-            end
+        addButton("Destroy GUI", function()
             GUI:Destroy()
         end)
-
     end
 end
 
--- SIDEBAR TABS
+-- SIDEBAR
 local tabs = {
-    "Main",
+    "Home",
     "Wood",
+    "Items",
     "Movement",
     "Teleports",
-    "Tree Info",
-    "Axes",
+    "Settings",
     "Misc"
 }
 
-for i, tab in ipairs(tabs) do
+for _, tab in ipairs(tabs) do
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -12, 0, 38)
-    b.Position = UDim2.fromOffset(6, (i-1)*43 + 8)
-    b.BackgroundColor3 = Color3.fromRGB(40, 45, 58)
+    b.BackgroundColor3 = Color3.fromRGB(34,40,55)
     b.TextColor3 = Color3.new(1,1,1)
     b.Text = tab
     b.Font = Enum.Font.GothamBold
     b.TextSize = 12
     b.Parent = Sidebar
-
-    Instance.new("UICorner", b)
+    corner(b, 7)
 
     b.MouseButton1Click:Connect(function()
         loadTab(tab)
     end)
 end
 
--- SHOW / HIDE WITH RIGHT SHIFT
+-- RGB ANIMATION
+local hue = 0
+
+RunService.RenderStepped:Connect(function(dt)
+    if Settings.RGB then
+        hue = (hue + dt * 0.12) % 1
+        local color = Color3.fromHSV(hue, 0.85, 1)
+        Stroke.Color = color
+        Settings.Accent = color
+    end
+end)
+
+-- KEYBIND
 UIS.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.RightShift then
+    if input.KeyCode == Settings.ToggleKey then
         Main.Visible = not Main.Visible
     end
 end)
 
 LP.CharacterAdded:Connect(function(char)
     Character = char
-    Root = char:WaitForChild("HumanoidRootPart")
-    Humanoid = char:WaitForChild("Humanoid")
+    Backpack = LP:WaitForChild("Backpack")
 end)
 
-loadTab("Main")
-notify("LT2 Utility Hub loaded!")
+loadTab("Home")
+notify("LT2 Utility Hub V2 Loaded")
